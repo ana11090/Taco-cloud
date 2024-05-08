@@ -1,47 +1,123 @@
-create table if not exists Ingredient (
-                                          id varchar(4) not null,
-    name varchar(25) not null,
-    type varchar(10) not null
-    );
-create table if not exists Taco (
-                                    id identity,
-                                    name varchar(50) not null,
-    createdAt timestamp not null
-    );
-create table if not exists Taco_Ingredients (
-                                                taco bigint not null,
-                                                ingredient varchar(4) not null
-    );
-alter table Taco_Ingredients
-    add foreign key (taco) references Taco(id);
-alter table Taco_Ingredients
-    add foreign key (ingredient) references Ingredient(id);
-create table if not exists Taco_Order (
-                                          id identity,
-                                          deliveryName varchar(50) not null,
-    deliveryStreet varchar(50) not null,
-    deliveryCity varchar(50) not null,
-    deliveryState varchar(2) not null,
-    deliveryZip varchar(10) not null,
-    ccNumber varchar(16) not null,
-    ccExpiration varchar(5) not null,
-    ccCVV varchar(3) not null,
-    placedAt timestamp not null
-    );
-create table if not exists Taco_Order_Tacos (
-                                                tacoOrder bigint not null,
-                                                taco bigint not null
-);
-alter table Taco_Order_Tacos
-    add foreign key (tacoOrder) references Taco_Order(id);
-alter table Taco_Order_Tacos
-    add foreign key (taco) references Taco(id);
+import sia.tacocloud.Ingredient;
+import sia.tacocloud.IngredientRepository;
+import sia.tacocloud.Taco;
+import sia.tacocloud.TacoRepository;
+import sia.tacocloud.data.JdbcIngredientRepository;
+import sia.tacocloud.data.JdbcTacoRepository;
 
+// IngredientRepository interface
+public interface IngredientRepository {
+    Ingredient findOne(String id);
+    Ingredient save(Ingredient ingredient);
+}
 
-DROP TABLE IF EXISTS Ingredient;
+// JdbcIngredientRepository implementation
+public class JdbcIngredientRepository implements IngredientRepository {
+    private JdbcTemplate jdbc;
 
-CREATE TABLE Ingredient (
-                            id VARCHAR(4),
-                            name VARCHAR(25),
-                            type VARCHAR(10)
-);
+public JdbcIngredientRepository(DataSource dataSource) {
+        this.jdbc = new JdbcTemplate(dataSource);
+}
+
+    @Override
+    public Ingredient findOne(String id) {
+        return jdbc.queryForObject(
+                "select id, name, type from Ingredient where id=?",
+                (rs, rowNum) -> new Ingredient(
+                        rs.getString("id"),
+                        rs.getString("name"),
+                        Ingredient.Type.valueOf(rs.getString("type"))
+                ),
+                id
+        );
+}
+
+    @Override
+    public Ingredient save(Ingredient ingredient) {
+        if (ingredient.getId() == null) {
+            this.jdbc.update(
+                    "insert into Ingredient (id, name, type) values (?, ?, ?)",
+                    ingredient.getId(),
+                    ingredient.getName(),
+                    ingredient.getType().getLookup()
+            );
+} else {
+            this.jdbc.update(
+                    "update Ingredient set name=?, type=? where id=?",
+                    ingredient.getName(),
+                    ingredient.getType().getLookup(),
+                    ingredient.getId()
+            );
+}
+        return ingredient;
+}
+}
+
+// TacoRepository interface
+public interface TacoRepository {
+    Taco save(Taco taco);
+}
+
+// JdbcTacoRepository implementation
+public class JdbcTacoRepository implements TacoRepository {
+    private JdbcTemplate jdbc;
+
+public JdbcTacoRepository(DataSource dataSource) {
+        this.jdbc = new JdbcTemplate(dataSource);
+}
+
+    @Override
+    public Taco save(Taco taco) {
+        long tacoId = saveTacoInfo(taco);
+        taco.setId(tacoId);
+for (Ingredient ingredient : taco.getIngredients()) {
+            saveIngredientToTaco(ingredient, tacoId);
+}
+        return taco;
+}
+
+    private long saveTacoInfo(Taco taco) {
+        String tacoName = taco.getName();
+        long createdAt = System.currentTimeMillis();
+        this.jdbc.update(
+                "insert into Taco (name, createdAt) values (?, ?)",
+                tacoName,
+                createdAt
+        );
+return this.jdbc.queryForObject(
+        "select last_insert_id()",
+        Long.class
+       );
+}
+
+    private void saveIngredientToTaco(Ingredient ingredient, long tacoId) {
+        this.jdbc.update(
+                "insert into Taco_Ingredients (taco, ingredient) values (?, ?)",
+                tacoId,
+                ingredient.getId()
+        );
+}
+}
+
+// Ingredient class
+public class Ingredient {
+    private String id;
+    private String name;
+    private Type type;
+
+// constructors, getters, and setters
+}
+
+// Taco class
+public class Taco {
+    private Long id;
+    private String name;
+    private Date createdAt;
+    private List<Ingredient> ingredients;
+
+// constructors, getters, and setters
+}
+
+// Type enum
+public enum Type {
+    WRAP, PRO}
